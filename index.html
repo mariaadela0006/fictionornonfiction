@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fiction vs Non-Fiction: Book Battle</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Quicksand:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Quicksand', sans-serif;
+            background-color: #f0f9ff;
+            overflow-x: hidden;
+        }
+        .title-font { font-family: 'Bungee', cursive; }
+        
+        .book-card {
+            transition: transform 0.2s, filter 0.3s;
+            cursor: pointer;
+            position: relative;
+        }
+        .book-card:hover:not(.disabled) {
+            transform: scale(1.05);
+        }
+        .book-card.disabled {
+            filter: grayscale(1) opacity(0.5);
+            cursor: not-allowed;
+        }
+        
+        .book-number-badge {
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            background: #facc15;
+            color: #1e3a8a;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 900;
+            font-size: 1.25rem;
+            border: 3px solid #1e3a8a;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            z-index: 10;
+        }
+        
+        .modal-overlay {
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(5px);
+        }
+
+        .team-active {
+            border: 8px solid #fbbf24;
+            transform: scale(1.1);
+            box-shadow: 0 0 30px rgba(251, 191, 36, 0.6);
+        }
+
+        .bounce-in {
+            animation: bounceIn 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0.3); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .image-fallback {
+            background: linear-gradient(135deg, #6366f1, #a855f7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            text-align: center;
+            padding: 10px;
+            font-weight: bold;
+            border-radius: 8px;
+            aspect-ratio: 2/3;
+        }
+
+        #result-overlay {
+            justify-content: space-evenly;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <div id="app">
+        <!-- SETUP PAGE -->
+        <div id="setup-page" class="min-h-screen flex flex-col items-center justify-center p-4 relative" style="background: url('home_bg.png') center/cover no-repeat, #3b82f6;">
+            <div class="bg-white/90 p-10 rounded-3xl shadow-2xl text-center max-w-lg w-full border-8 border-yellow-400">
+                <h1 class="title-font text-5xl text-blue-600 mb-6 drop-shadow-md">BOOK BATTLE</h1>
+                <p class="text-xl font-bold text-gray-700 mb-8">Fiction vs Non-Fiction</p>
+                
+                <div class="mb-8">
+                    <label class="block text-lg font-bold text-blue-800 mb-2">How many teams?</label>
+                    <div class="flex items-center justify-center gap-6">
+                        <button onclick="changeTeamCount(-1)" class="bg-red-500 text-white w-12 h-12 rounded-full text-3xl font-bold hover:bg-red-600 shadow-lg">-</button>
+                        <span id="team-count-display" class="text-5xl font-black text-gray-800">3</span>
+                        <button onclick="changeTeamCount(1)" class="bg-green-500 text-white w-12 h-12 rounded-full text-3xl font-bold hover:bg-green-600 shadow-lg">+</button>
+                    </div>
+                </div>
+
+                <button onclick="startGame()" class="bg-yellow-400 hover:bg-yellow-500 text-blue-900 title-font text-3xl py-4 px-12 rounded-full transition-all transform hover:scale-110 shadow-xl border-b-8 border-yellow-600">
+                    START GAME!
+                </button>
+            </div>
+        </div>
+
+        <!-- BATTLE PAGE -->
+        <div id="battle-page" class="hidden min-h-screen p-4 flex flex-col" style="background: url('battle.png') center/cover no-repeat, #1e293b;">
+            <!-- Header: Scores -->
+            <div id="teams-container" class="flex flex-wrap justify-center gap-6 mb-8 pt-4">
+                <!-- Teams injected here -->
+            </div>
+
+            <!-- Main Area: Book Grid -->
+            <div class="flex-grow flex items-center justify-center">
+                <div id="book-grid" class="grid grid-cols-2 md:grid-cols-5 gap-8 max-w-6xl w-full px-4">
+                    <!-- Books injected here -->
+                </div>
+            </div>
+
+            <!-- Footer: Turn Indicator & End Game Button -->
+            <div class="mt-4 flex flex-col sm:flex-row items-center justify-between bg-white/20 backdrop-blur-md p-4 rounded-2xl gap-4">
+                <p class="text-white text-3xl font-bold">Current Turn: <span id="current-team-display" class="text-yellow-400 title-font">Team 1</span></p>
+                <button onclick="showWinnerSelection()" class="bg-red-600 hover:bg-red-700 text-white font-black py-3 px-10 rounded-full text-xl shadow-lg transition-transform active:scale-95">
+                    END GAME
+                </button>
+            </div>
+        </div>
+
+        <!-- BOOK POPUP MODAL -->
+        <div id="book-modal" class="hidden inset-0 fixed modal-overlay z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-[3rem] p-8 max-w-5xl w-full h-[90vh] text-center bounce-in shadow-2xl border-8 border-blue-400 relative overflow-hidden flex flex-col">
+                <div id="question-content" class="flex-grow flex flex-col items-center justify-center">
+                    <div id="modal-book-container" class="w-56 h-80 mx-auto mb-6 rounded-lg overflow-hidden shadow-2xl border-4 border-white">
+                        <!-- Enlarged book cover here -->
+                    </div>
+                    
+                    <h2 id="modal-question" class="text-4xl font-black text-blue-900 mb-8">Is this book Fiction or Non-Fiction?</h2>
+                    
+                    <div id="answer-buttons" class="flex flex-col sm:flex-row gap-6 justify-center w-full max-w-2xl">
+                        <button onclick="checkAnswer('FICTION')" class="flex-1 bg-pink-500 hover:bg-pink-600 text-white title-font text-3xl py-6 rounded-3xl shadow-xl transition-transform active:scale-95">FICTION</button>
+                        <button onclick="checkAnswer('NON-FICTION')" class="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white title-font text-3xl py-6 rounded-3xl shadow-xl transition-transform active:scale-95">NON-FICTION</button>
+                    </div>
+                </div>
+
+                <!-- Result Overlay (Feedback) -->
+                <div id="result-overlay" class="hidden absolute inset-0 bg-white flex flex-col items-center p-8 z-10">
+                    <h3 id="result-message-status" class="text-7xl font-black mb-2">CORRECT</h3>
+                    <img id="result-gif" src="" alt="feedback" class="h-64 w-64 object-contain">
+                    <div class="text-center">
+                        <h3 id="result-message" class="text-4xl font-bold text-gray-700 mb-2"></h3>
+                        <p id="result-points" class="text-8xl font-black text-red-500 mb-6"></p>
+                    </div>
+                    <button onclick="closeModal()" class="bg-blue-600 hover:bg-blue-700 text-white title-font py-6 px-20 rounded-full text-5xl shadow-2xl transform transition active:scale-95">CONTINUE</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- WINNER SELECTION MODAL -->
+        <div id="winner-selection-modal" class="hidden fixed inset-0 modal-overlay z-[70] flex items-center justify-center p-4">
+            <div class="bg-white p-10 rounded-[3rem] text-center max-w-2xl w-full border-8 border-red-500 shadow-2xl">
+                <h2 class="title-font text-4xl text-blue-800 mb-6">Select Winner</h2>
+                <div id="winner-team-buttons" class="grid grid-cols-2 gap-4 mb-8">
+                    <!-- Winner buttons injected here -->
+                </div>
+                <button onclick="document.getElementById('winner-selection-modal').classList.add('hidden')" class="text-gray-500 font-bold hover:underline">Cancel</button>
+            </div>
+        </div>
+
+        <!-- END GAME PAGE -->
+        <div id="end-page" class="hidden fixed inset-0 bg-blue-900 flex items-center justify-center p-4 z-[80]">
+            <div class="bg-white p-12 rounded-[4rem] text-center max-w-4xl w-full border-[15px] border-yellow-400 shadow-2xl">
+                <h1 class="title-font text-7xl text-blue-600 mb-6">GAME OVER!</h1>
+                <div id="winner-announcement" class="mb-10 flex flex-col items-center">
+                    <img src="winner.gif" alt="Winner" class="w-80 h-80 mb-6 object-contain">
+                    <p class="text-4xl font-bold text-gray-700">Winner:</p>
+                    <p id="winner-name" class="title-font text-8xl text-yellow-500 drop-shadow-lg">TEAM 1</p>
+                </div>
+                <div id="final-scoreboard" class="space-y-4 mb-12 text-3xl font-bold text-gray-600">
+                    <!-- Final scores injected here -->
+                </div>
+                <button onclick="location.reload()" class="bg-blue-600 hover:bg-blue-700 text-white title-font text-4xl py-6 px-16 rounded-full">PLAY AGAIN</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /** * TEACHER SETTINGS: Answer Key */
+        const BOOK_ANSWERS_RAW = {
+            1: 'NF', 2: 'F', 3: 'F', 4: 'F', 5: 'F', 6: 'F', 7: 'F', 8: 'F', 9: 'F', 10: 'F',
+            11: 'F', 12: 'F', 13: 'F', 14: 'F', 15: 'F', 16: 'F', 17: 'NF', 18: 'NF', 19: 'NF', 20: 'NF',
+            21: 'NF', 22: 'NF', 23: 'NF', 24: 'NF', 25: 'NF', 26: 'NF', 27: 'NF', 28: 'NF', 29: 'NF', 30: 'NF'
+        };
+
+        const STARTING_POINTS = 1000;
+        
+        // Point values available
+        const LOW_POINTS = [10, 20, 30, 40, 50];
+        const HIGH_POINTS = [60, 70, 80, 90, 100];
+
+        let teamCount = 3;
+        let teams = [];
+        let currentTeamIndex = 0;
+        let currentBatchIndex = 0; 
+        let booksAnswered = new Set();
+        let currentSelectedBook = null;
+        let shuffledBooks = [];
+        let batchPointsMap = {}; // Stores which book in the current batch gets which points
+
+        const setupPage = document.getElementById('setup-page');
+        const battlePage = document.getElementById('battle-page');
+        const teamCountDisplay = document.getElementById('team-count-display');
+        const teamsContainer = document.getElementById('teams-container');
+        const bookGrid = document.getElementById('book-grid');
+        const bookModal = document.getElementById('book-modal');
+        const currentTeamDisplay = document.getElementById('current-team-display');
+
+        function changeTeamCount(delta) {
+            teamCount = Math.max(2, Math.min(6, teamCount + delta));
+            teamCountDisplay.innerText = teamCount;
+        }
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        function generateBatchPoints() {
+            // Get current 10 books
+            const start = currentBatchIndex * 10;
+            const end = start + 10;
+            const currentBatchIds = shuffledBooks.slice(start, end);
+            
+            // Create a pool of 7 low and 3 high values
+            let pointsPool = [];
+            for(let i=0; i<7; i++) pointsPool.push(LOW_POINTS[Math.floor(Math.random() * LOW_POINTS.length)]);
+            for(let i=0; i<3; i++) pointsPool.push(HIGH_POINTS[Math.floor(Math.random() * HIGH_POINTS.length)]);
+            
+            // Shuffle the pool
+            shuffleArray(pointsPool);
+            
+            // Assign to book IDs
+            batchPointsMap = {};
+            currentBatchIds.forEach((id, idx) => {
+                batchPointsMap[id] = pointsPool[idx];
+            });
+        }
+
+        function startGame() {
+            shuffledBooks = shuffleArray(Object.keys(BOOK_ANSWERS_RAW).map(Number));
+            teams = [];
+            for (let i = 1; i <= teamCount; i++) {
+                teams.push({ id: i, score: STARTING_POINTS });
+            }
+            setupPage.classList.add('hidden');
+            battlePage.classList.remove('hidden');
+            renderTeams();
+            generateBatchPoints(); // Initial point distribution
+            renderBookBatch();
+            updateTurnUI();
+        }
+
+        function renderTeams() {
+            teamsContainer.innerHTML = '';
+            teams.forEach((team, index) => {
+                const div = document.createElement('div');
+                div.id = `team-card-${index}`;
+                div.className = `bg-white p-6 rounded-3xl shadow-xl text-center min-w-[180px] transition-all border-8 ${index === currentTeamIndex ? 'team-active border-yellow-400' : 'border-white'}`;
+                if (team.score <= 0) div.classList.add('opacity-50', 'grayscale');
+                
+                div.innerHTML = `
+                    <p class="font-black text-2xl text-blue-800 mb-1">TEAM ${team.id}</p>
+                    <p class="text-6xl font-black text-gray-900">${team.score}</p>
+                `;
+                teamsContainer.appendChild(div);
+            });
+        }
+
+        function renderBookBatch() {
+            bookGrid.innerHTML = '';
+            const start = currentBatchIndex * 10;
+            const end = start + 10;
+            const batch = shuffledBooks.slice(start, end);
+
+            batch.forEach((bookId, index) => {
+                const card = document.createElement('div');
+                card.id = `book-card-${bookId}`;
+                const isUsed = booksAnswered.has(bookId);
+                card.className = `book-card bg-white rounded-2xl shadow-lg p-2 overflow-visible border-4 border-white ${isUsed ? 'disabled' : ''}`;
+                
+                const badge = document.createElement('div');
+                badge.className = 'book-number-badge';
+                badge.innerText = index + 1; 
+                card.appendChild(badge);
+
+                const img = document.createElement('img');
+                img.src = `book${bookId}.png`;
+                img.alt = `Book ${bookId}`;
+                img.className = "w-full h-48 object-cover rounded-xl";
+                
+                img.onerror = function() {
+                    const parent = this.parentElement;
+                    const placeholder = document.createElement('div');
+                    placeholder.className = "image-fallback h-48";
+                    placeholder.innerText = `Book Cover`;
+                    parent.appendChild(placeholder);
+                    this.remove();
+                };
+
+                if (!isUsed) {
+                    card.onclick = () => openBook(bookId);
+                }
+
+                card.appendChild(img);
+                bookGrid.appendChild(card);
+            });
+        }
+
+        function openBook(bookId) {
+            currentSelectedBook = bookId;
+            const modalBookContainer = document.getElementById('modal-book-container');
+            modalBookContainer.innerHTML = '';
+            const img = document.createElement('img');
+            img.src = `book${bookId}.png`;
+            img.className = "w-full h-full object-cover";
+            img.onerror = function() {
+                this.parentElement.innerHTML = `<div class="image-fallback h-full">Book Cover</div>`;
+            };
+            modalBookContainer.appendChild(img);
+            document.getElementById('result-overlay').classList.add('hidden');
+            bookModal.classList.remove('hidden');
+        }
+
+        function checkAnswer(choice) {
+            const correctAnswer = BOOK_ANSWERS_RAW[currentSelectedBook] === 'F' ? 'FICTION' : 'NON-FICTION';
+            const isCorrect = choice === correctAnswer;
+            const overlay = document.getElementById('result-overlay');
+            const statusText = document.getElementById('result-message-status');
+            const gif = document.getElementById('result-gif');
+            const msg = document.getElementById('result-message');
+            const pts = document.getElementById('result-points');
+            
+            let pointsDeducted = 0;
+            
+            if (isCorrect) {
+                statusText.innerText = "CORRECT";
+                statusText.className = "text-7xl font-black text-green-500 mb-2";
+                
+                // Get pre-determined points for this specific book
+                pointsDeducted = batchPointsMap[currentSelectedBook];
+                
+                msg.innerText = pointsDeducted <= 50 ? "You're lucky!" : "Good job!";
+                gif.src = pointsDeducted <= 50 ? 'happy.gif' : 'okay.gif';
+            } else {
+                statusText.innerText = "INCORRECT";
+                statusText.className = "text-7xl font-black text-red-600 mb-2";
+                
+                // Static -100 for incorrect answers
+                pointsDeducted = 100;
+                msg.innerText = "Oops, wrong answer!";
+                gif.src = 'incorrect.gif';
+            }
+            
+            teams[currentTeamIndex].score = Math.max(0, teams[currentTeamIndex].score - pointsDeducted);
+            pts.innerText = `-${pointsDeducted} Points`;
+            booksAnswered.add(currentSelectedBook);
+            overlay.classList.remove('hidden');
+            renderTeams();
+        }
+
+        function closeModal() {
+            bookModal.classList.add('hidden');
+            
+            const activeTeamsCount = teams.filter(t => t.score > 0).length;
+            if (activeTeamsCount < 2) {
+                showWinnerSelection();
+                return;
+            }
+
+            const start = currentBatchIndex * 10;
+            const end = start + 10;
+            const currentBatchBooks = shuffledBooks.slice(start, end);
+            const batchFinished = currentBatchBooks.every(id => booksAnswered.has(id));
+
+            if (batchFinished) {
+                if (currentBatchIndex >= 2) {
+                    shuffledBooks = shuffleArray(Object.keys(BOOK_ANSWERS_RAW).map(Number));
+                    booksAnswered.clear();
+                    currentBatchIndex = 0;
+                } else {
+                    currentBatchIndex++;
+                }
+                generateBatchPoints(); // Generate new points for the next batch
+                renderBookBatch();
+            } else {
+                renderBookBatch();
+            }
+            
+            let foundNext = false;
+            for (let i = 1; i <= teams.length; i++) {
+                let nextIdx = (currentTeamIndex + i) % teams.length;
+                if (teams[nextIdx].score > 0) {
+                    currentTeamIndex = nextIdx;
+                    foundNext = true;
+                    break;
+                }
+            }
+            
+            if (!foundNext) {
+                if (teams[currentTeamIndex].score <= 0) {
+                     showWinnerSelection();
+                     return;
+                }
+            }
+
+            updateTurnUI();
+        }
+
+        function updateTurnUI() {
+            currentTeamDisplay.innerText = `Team ${teams[currentTeamIndex].id}`;
+            renderTeams();
+        }
+
+        function showWinnerSelection() {
+            const modal = document.getElementById('winner-selection-modal');
+            const container = document.getElementById('winner-team-buttons');
+            container.innerHTML = '';
+            teams.forEach(team => {
+                const btn = document.createElement('button');
+                btn.className = "bg-blue-600 hover:bg-blue-700 text-white title-font py-4 px-6 rounded-2xl text-xl shadow-lg transform transition active:scale-95";
+                btn.innerText = `Team ${team.id}`;
+                btn.onclick = () => showWinner(team);
+                container.appendChild(btn);
+            });
+            modal.classList.remove('hidden');
+        }
+
+        function showWinner(team) {
+            document.getElementById('winner-selection-modal').classList.add('hidden');
+            const endPage = document.getElementById('end-page');
+            const winnerName = document.getElementById('winner-name');
+            const scoreboard = document.getElementById('final-scoreboard');
+            winnerName.innerText = `TEAM ${team.id}`;
+            scoreboard.innerHTML = '';
+            const sortedTeams = [...teams].sort((a, b) => b.score - a.score);
+            sortedTeams.forEach(t => {
+                const p = document.createElement('p');
+                p.innerText = `Team ${t.id}: ${t.score} Points`;
+                scoreboard.appendChild(p);
+            });
+            endPage.classList.remove('hidden');
+        }
+
+        teamCountDisplay.innerText = teamCount;
+    </script>
+</body>
+</html>
